@@ -80,3 +80,85 @@ TROUT_POUT_ABI: List[Dict[str, Any]] = [
     {
         "inputs": [{"internalType": "address", "name": "", "type": "address"}],
         "name": "smoltSessionNonces",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "kelpiePaused",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+
+class PoutRenderLane(enum.IntEnum):
+    Unassigned = 0
+    CheekBloom = 1
+    IrisGlass = 2
+    JawSculpt = 3
+    MicroTexture = 4
+    TemporalWarp = 5
+
+
+@dataclasses.dataclass(frozen=True)
+class UltiPoutConfig:
+    rpc_url: str
+    trout_pout_address: str
+    private_key_hex: Optional[str]
+    http_host: str
+    http_port: int
+    cache_dir: Path
+    sharpen_cap: float
+    thermal_noise: float
+    cheek_lift: float
+    iris_glass_strength: float
+    jaw_pinch: float
+    telemetry_salt: bytes
+    chain_id: int
+
+    @staticmethod
+    def from_env() -> "UltiPoutConfig":
+        import secrets as S
+
+        base = Path(os.environ.get("ULTIPOUT_CACHE", str(Path.home() / ".ultipout")))
+        salt_hex = os.environ.get("ULTIPOUT_SALT", "")
+        salt = bytes.fromhex(salt_hex.replace("0x", "")) if salt_hex else S.token_bytes(32)
+        return UltiPoutConfig(
+            rpc_url=os.environ.get("ULTIPOUT_RPC", "https://eth.llamarpc.com"),
+            trout_pout_address=os.environ.get("ULTIPOUT_CONTRACT", ""),
+            private_key_hex=os.environ.get("ULTIPOUT_PRIVATE_KEY"),
+            http_host=os.environ.get("ULTIPOUT_HOST", "127.0.0.1"),
+            http_port=int(os.environ.get("ULTIPOUT_PORT", "8765")),
+            cache_dir=base,
+            sharpen_cap=float(os.environ.get("ULTIPOUT_SHARPEN", "1.35")),
+            thermal_noise=float(os.environ.get("ULTIPOUT_THERMAL", "0.11")),
+            cheek_lift=float(os.environ.get("ULTIPOUT_CHEEK", "0.18")),
+            iris_glass_strength=float(os.environ.get("ULTIPOUT_IRIS", "0.27")),
+            jaw_pinch=float(os.environ.get("ULTIPOUT_JAW", "0.14")),
+            telemetry_salt=salt,
+            chain_id=int(os.environ.get("ULTIPOUT_CHAIN_ID", str(CHAIN_ID_DEFAULT))),
+        )
+
+
+@dataclasses.dataclass
+class FaceBBox:
+    x0: int
+    y0: int
+    x1: int
+    y1: int
+
+    @property
+    def width(self) -> int:
+        return max(1, self.x1 - self.x0)
+
+    @property
+    def height(self) -> int:
+        return max(1, self.y1 - self.y0)
+
+    def clamp(self, w: int, h: int) -> "FaceBBox":
+        return FaceBBox(
+            max(0, min(self.x0, w - 1)),
+            max(0, min(self.y0, h - 1)),
