@@ -408,3 +408,85 @@ def pout_session_struct_hash(draft: PoutSessionDraft) -> bytes:
 
 def eip712_digest(chain_id: int, contract: str, draft: PoutSessionDraft) -> bytes:
     domain = eip712_domain_separator(chain_id, contract)
+    struct_hash = pout_session_struct_hash(draft)
+    return _keccak256(b"\x19\x01" + domain + struct_hash)
+
+
+def sign_session_local(
+    private_key_hex: str,
+    chain_id: int,
+    contract: str,
+    draft: PoutSessionDraft,
+) -> Tuple[int, bytes, bytes]:
+    if Account is None:
+        raise RuntimeError("eth-account not installed")
+    digest = eip712_digest(chain_id, contract, draft)
+    signed = Account._sign_hash(digest, private_key=private_key_hex)
+    return signed.v, signed.r, signed.s
+
+
+def web3_contract(cfg: UltiPoutConfig):
+    if Web3 is None or not cfg.trout_pout_address:
+        return None
+    w3 = Web3(Web3.HTTPProvider(cfg.rpc_url))
+    return w3.eth.contract(address=Web3.to_checksum_address(cfg.trout_pout_address), abi=TROUT_POUT_ABI)
+
+
+def fetch_riffle_credits(cfg: UltiPoutConfig, user: str) -> Optional[int]:
+    c = web3_contract(cfg)
+    if c is None:
+        return None
+    try:
+        return int(c.functions.riffleCredits(Web3.to_checksum_address(user)).call())
+    except Exception as exc:  # pragma: no cover
+        LOG.warning("riffleCredits call failed: %s", exc)
+        return None
+
+
+def fetch_session_nonce(cfg: UltiPoutConfig, user: str) -> Optional[int]:
+    c = web3_contract(cfg)
+    if c is None:
+        return None
+    try:
+        return int(c.functions.smoltSessionNonces(Web3.to_checksum_address(user)).call())
+    except Exception as exc:  # pragma: no cover
+        LOG.warning("smoltSessionNonces call failed: %s", exc)
+        return None
+
+
+def render_cli(image_path: Path, lane: str, out_path: Path, cfg: UltiPoutConfig) -> None:
+    lane_e = PoutRenderLane[lane]
+    im = Image.open(image_path)
+    out = compose_lane_stack(im, lane_e, cfg, seed=hash(image_path.name) % (2**31))
+    out.save(out_path)
+    LOG.info("Wrote %s", out_path)
+
+
+class UltiPoutHTTPHandler(BaseHTTPRequestHandler):
+    cfg: UltiPoutConfig = UltiPoutConfig.from_env()
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        LOG.info("%s - %s", self.address_string(), fmt % args)
+
+    def do_GET(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path != "/health":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        body = json.dumps({"ok": True, "app": "UltiPout"}).encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path != "/render":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            lane = PoutRenderLane[payload.get("lane", "TemporalWarp")]
