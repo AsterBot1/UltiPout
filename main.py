@@ -244,3 +244,85 @@ class ThermalDither:
             w, h = arr.size
             for y in range(h):
                 for x in range(w):
+                    if (x + y) % 6 == 0:
+                        r, g, b = pix[x, y]
+                        n = int((random.random() - 0.5) * 10 * self.sigma)
+                        pix[x, y] = (
+                            max(0, min(255, r + n)),
+                            max(0, min(255, g + n)),
+                            max(0, min(255, b + n)),
+                        )
+            return arr
+        a = np.asarray(im.convert("RGB"), dtype=np.float32)
+        noise = np.random.normal(0, 4.0 * self.sigma, a.shape)
+        out = np.clip(a + noise, 0, 255).astype(np.uint8)
+        return Image.fromarray(out, "RGB")
+
+
+def _pseudo_face_bbox(w: int, h: int, seed: int) -> FaceBBox:
+    rnd = random.Random(seed)
+    fw = int(w * rnd.uniform(0.35, 0.52))
+    fh = int(h * rnd.uniform(0.42, 0.58))
+    cx = int(w * rnd.uniform(0.45, 0.55))
+    cy = int(h * rnd.uniform(0.38, 0.48))
+    return FaceBBox(cx - fw // 2, cy - fh // 2, cx + fw // 2, cy + fh // 2).clamp(w, h)
+
+
+def detect_face_bbox(image: Image.Image, seed: int = 7) -> FaceBBox:
+    """Fallback face box when OpenCV or MediaPipe are absent."""
+    w, h = image.size
+    return _pseudo_face_bbox(w, h, seed)
+
+
+def _ensure_rgba(im: Image.Image) -> Image.Image:
+    return im if im.mode == "RGBA" else im.convert("RGBA")
+
+
+def apply_cheek_bloom(image: Image.Image, bbox: FaceBBox, strength: float) -> Image.Image:
+    im = _ensure_rgba(image)
+    field = CheekRibbonField(strength)
+    w, h = im.size
+    pix = im.load()
+    assert pix is not None
+    out = Image.new("RGBA", (w, h))
+    op = out.load()
+    assert op is not None
+    for y in range(bbox.y0, bbox.y1):
+        for x in range(bbox.x0, bbox.x1):
+            nx = (x - bbox.x0) / bbox.width
+            ny = (y - bbox.y0) / bbox.height
+            dx, dy = field.sample_offset(nx, ny)
+            sx = int(x + dx * bbox.width)
+            sy = int(y + dy * bbox.height)
+            sx = max(0, min(w - 1, sx))
+            sy = max(0, min(h - 1, sy))
+            op[x, y] = pix[sx, sy]
+    for y in range(h):
+        for x in range(w):
+            if not (bbox.x0 <= x < bbox.x1 and bbox.y0 <= y < bbox.y1):
+                op[x, y] = pix[x, y]
+    return out
+
+
+def apply_iris_glass(image: Image.Image, bbox: FaceBBox, strength: float) -> Image.Image:
+    im = _ensure_rgba(image)
+    crop = im.crop((bbox.x0, bbox.y0, bbox.x1, bbox.y1))
+    tinted = IrisGlassFilter(strength).apply(crop)
+    layer = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    layer.paste(tinted, (bbox.x0, bbox.y0))
+    return Image.alpha_composite(im, layer)
+
+
+def apply_jaw_pinch(image: Image.Image, bbox: FaceBBox, pinch: float) -> Image.Image:
+    im = image.convert("RGB")
+    nb = JawSculptMap(pinch).warp_bbox(bbox).clamp(im.width, im.height)
+    face = im.crop((bbox.x0, bbox.y0, bbox.x1, bbox.y1))
+    face = face.resize((max(1, nb.width), max(1, nb.height)), Image.Resampling.LANCZOS)
+    canvas = im.copy()
+    canvas.paste(face, (nb.x0, nb.y0))
+    return canvas
+
+
+def compose_lane_stack(
+    image: Image.Image,
+    lane: PoutRenderLane,
