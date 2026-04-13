@@ -162,3 +162,85 @@ class FaceBBox:
         return FaceBBox(
             max(0, min(self.x0, w - 1)),
             max(0, min(self.y0, h - 1)),
+            max(1, min(self.x1, w)),
+            max(1, min(self.y1, h)),
+        )
+
+
+@dataclasses.dataclass
+class PoutSessionDraft:
+    user: str
+    session_nonce: int
+    credits_cost: int
+    effect_id: int
+    deadline: int
+
+
+class UltiPoutTelemetry:
+    """Hashes telemetry shards so previews never ship raw landmarks."""
+
+    def __init__(self, salt: bytes) -> None:
+        self._salt = salt
+
+    def shard(self, label: str, payload: Mapping[str, Any]) -> str:
+        blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(self._salt + label.encode() + blob).hexdigest()
+
+
+class CheekRibbonField:
+    """Vector field approximating a cheek-bloom lift for the preview shader."""
+
+    def __init__(self, strength: float) -> None:
+        self.strength = float(strength)
+
+    def sample_offset(self, nx: float, ny: float) -> Tuple[float, float]:
+        r = math.hypot(nx - 0.5, ny - 0.62)
+        theta = math.atan2(ny - 0.62, nx - 0.5)
+        mag = math.exp(-((r - 0.18) ** 2) / 0.012) * self.strength
+        return mag * math.cos(theta + 0.4), mag * math.sin(theta + 0.4)
+
+
+class IrisGlassFilter:
+    """Spectral tint overlay mimicking glassy iris caustics."""
+
+    def __init__(self, strength: float) -> None:
+        self.strength = max(0.0, min(1.0, strength))
+
+    def apply(self, crop: Image.Image) -> Image.Image:
+        r, g, b, *rest = crop.split()
+        a = rest[0] if rest else None
+        r = r.point(lambda v: int(min(255, v + self.strength * 22)))
+        g = g.point(lambda v: int(min(255, v + self.strength * 38)))
+        b = b.point(lambda v: int(max(0, v - self.strength * 18)))
+        if a:
+            return Image.merge("RGBA", (r, g, b, a))
+        return Image.merge("RGB", (r, g, b))
+
+
+class JawSculptMap:
+    """Pinches lower facial third slightly inward."""
+
+    def __init__(self, pinch: float) -> None:
+        self.pinch = pinch
+
+    def warp_bbox(self, bbox: FaceBBox) -> FaceBBox:
+        cx = (bbox.x0 + bbox.x1) // 2
+        cy = (bbox.y0 + bbox.y1) // 2
+        w = int(bbox.width * (1.0 - self.pinch))
+        h = int(bbox.height * (1.0 - self.pinch * 0.5))
+        return FaceBBox(cx - w // 2, cy - h // 2, cx + w // 2, cy + h // 2)
+
+
+class ThermalDither:
+    """Adds benign noise so compressed exports do not ring on flat skin tones."""
+
+    def __init__(self, sigma: float) -> None:
+        self.sigma = sigma
+
+    def apply(self, im: Image.Image) -> Image.Image:
+        if np is None:
+            arr = im.convert("RGB")
+            pix = arr.load()
+            w, h = arr.size
+            for y in range(h):
+                for x in range(w):
