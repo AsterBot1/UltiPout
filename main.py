@@ -326,3 +326,85 @@ def apply_jaw_pinch(image: Image.Image, bbox: FaceBBox, pinch: float) -> Image.I
 def compose_lane_stack(
     image: Image.Image,
     lane: PoutRenderLane,
+    cfg: UltiPoutConfig,
+    seed: int,
+) -> Image.Image:
+    bbox = detect_face_bbox(image, seed)
+    out = image.convert("RGBA")
+    if lane in (PoutRenderLane.CheekBloom, PoutRenderLane.TemporalWarp):
+        out = apply_cheek_bloom(out, bbox, cfg.cheek_lift * (1.2 if lane == PoutRenderLane.TemporalWarp else 1.0))
+    if lane in (PoutRenderLane.IrisGlass, PoutRenderLane.TemporalWarp):
+        out = apply_iris_glass(out, bbox, cfg.iris_glass_strength)
+    if lane in (PoutRenderLane.JawSculpt, PoutRenderLane.TemporalWarp):
+        out = apply_jaw_pinch(out.convert("RGB"), bbox, cfg.jaw_pinch).convert("RGBA")
+    out = ThermalDither(cfg.thermal_noise).apply(out.convert("RGB")).convert("RGBA")
+    sharp = ImageEnhance.Sharpness(out)
+    out = sharp.enhance(min(cfg.sharpen_cap, 2.0))
+    return out
+
+
+def image_to_data_url(im: Image.Image, fmt: str = "PNG") -> str:
+    buf = io.BytesIO()
+    im.save(buf, format=fmt)
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    mime = f"image/{fmt.lower()}"
+    return f"data:{mime};base64,{b64}"
+
+
+def _keccak256(data: bytes) -> bytes:
+    try:
+        from Crypto.Hash import keccak
+
+        k = keccak.new(digest_bits=256)
+        k.update(data)
+        return k.digest()
+    except ImportError:
+        try:
+            import sha3
+
+            k = sha3.keccak_256()
+            k.update(data)
+            return k.digest()
+        except ImportError as exc:
+            raise RuntimeError("Install pycryptodome or pysha3 for local EIP-712 hashing") from exc
+
+
+def _abi_encode_packed_uint256(v: int) -> bytes:
+    return int(v).to_bytes(32, "big", signed=False)
+
+
+def _abi_encode_packed_address(addr: str) -> bytes:
+    hx = addr.lower().replace("0x", "")
+    b = binascii.unhexlify(hx.rjust(40, "0")[-40:])
+    return (b"\x00" * 12) + b
+
+
+def eip712_domain_separator(chain_id: int, verifying_contract: str) -> bytes:
+    type_hash = _keccak256(b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+    name_hash = _keccak256(b"TroutPoutSessionGate")
+    ver_hash = _keccak256(b"glacier-smolt-7")
+    inner = (
+        type_hash
+        + name_hash
+        + ver_hash
+        + _abi_encode_packed_uint256(chain_id)
+        + _abi_encode_packed_address(verifying_contract)
+    )
+    return _keccak256(inner)
+
+
+def pout_session_struct_hash(draft: PoutSessionDraft) -> bytes:
+    type_hash = _keccak256(POUT_SESSION_TYPESTRING.encode())
+    inner = (
+        type_hash
+        + _abi_encode_packed_address(draft.user)
+        + _abi_encode_packed_uint256(draft.session_nonce)
+        + _abi_encode_packed_uint256(draft.credits_cost)
+        + _abi_encode_packed_uint256(draft.effect_id)
+        + _abi_encode_packed_uint256(draft.deadline)
+    )
+    return _keccak256(inner)
+
+
+def eip712_digest(chain_id: int, contract: str, draft: PoutSessionDraft) -> bytes:
+    domain = eip712_domain_separator(chain_id, contract)
