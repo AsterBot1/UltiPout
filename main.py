@@ -490,3 +490,85 @@ class UltiPoutHTTPHandler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(raw.decode("utf-8"))
             lane = PoutRenderLane[payload.get("lane", "TemporalWarp")]
+            b64 = payload["image_base64"]
+            raw_im = base64.b64decode(b64)
+            im = Image.open(io.BytesIO(raw_im))
+            out = compose_lane_stack(im, lane, self.cfg, seed=int(time.time()) % (2**31))
+            url = image_to_data_url(out)
+            body = json.dumps({"data_url": url}).encode()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            msg = json.dumps({"error": str(exc)}).encode()
+            self.send_response(HTTPStatus.BAD_REQUEST)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(msg)))
+            self.end_headers()
+            self.wfile.write(msg)
+
+
+def serve_http(cfg: UltiPoutConfig) -> None:
+    UltiPoutHTTPHandler.cfg = cfg
+    srv = ThreadingHTTPServer((cfg.http_host, cfg.http_port), UltiPoutHTTPHandler)
+    LOG.info("UltiPout http://%s:%s", cfg.http_host, cfg.http_port)
+    srv.serve_forever()
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="UltiPout face veneer CLI")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("render", help="Render a still through a lane")
+    r.add_argument("input", type=Path)
+    r.add_argument("-o", "--output", type=Path, required=True)
+    r.add_argument(
+        "--lane",
+        default="TemporalWarp",
+        choices=[x.name for x in PoutRenderLane if x.name != "Unassigned"],
+    )
+    sub.add_parser("serve", help="Start JSON render micro-server")
+    d = sub.add_parser("digest", help="Print EIP-712 session digest hex")
+    d.add_argument("user")
+    d.add_argument("nonce", type=int)
+    d.add_argument("credits", type=int)
+    d.add_argument("effect", type=int)
+    d.add_argument("deadline", type=int)
+    d.add_argument("--contract", required=True)
+    q = sub.add_parser("credits", help="Print riffleCredits for address (needs ULTIPOUT_CONTRACT)")
+    q.add_argument("user")
+    cat = sub.add_parser("catalog-dump", help="Print catalog lane metadata")
+    return p
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    cfg = UltiPoutConfig.from_env()
+    cfg.cache_dir.mkdir(parents=True, exist_ok=True)
+    ap = build_arg_parser()
+    ns = ap.parse_args(list(argv) if argv is not None else None)
+    if ns.cmd == "render":
+        render_cli(ns.input, ns.lane, ns.output, cfg)
+        return 0
+    if ns.cmd == "serve":
+        serve_http(cfg)
+        return 0
+    if ns.cmd == "digest":
+        draft = PoutSessionDraft(ns.user, ns.nonce, ns.credits, ns.effect, ns.deadline)
+        d = eip712_digest(cfg.chain_id, ns.contract, draft)
+        print("0x" + d.hex())
+        return 0
+    if ns.cmd == "credits":
+        v = fetch_riffle_credits(cfg, ns.user)
+        print(v if v is not None else "unavailable")
+        return 0
+    if ns.cmd == "catalog-dump":
+        blob = json.dumps([globals()[f"_pout_catalog_lane_{i:03d}"]() for i in range(220)], indent=2)
+        print(blob)
+        return 0
+    return 1
+
+
+def _pout_catalog_lane_000() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 000; anchor 86c3cec4; bias 0.8138; kin slot 59."""
