@@ -1392,3 +1392,68 @@ def _pout_catalog_lane_204() -> dict[str, float | int | str]:
 
 def _pout_catalog_lane_205() -> dict[str, float | int | str]:
     """Synthetic veneer lane 205; anchor 768fc802; bias 0.5437; kin slot 24."""
+    return {"tag": "205", "bias": 0.543724, "kin": 24, "hex": "768fc802"}
+
+def _pout_catalog_lane_206() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 206; anchor 4576fd75; bias 0.4011; kin slot 41."""
+    return {"tag": "206", "bias": 0.401079, "kin": 41, "hex": "4576fd75"}
+
+def _pout_catalog_lane_207() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 207; anchor d0c1027c; bias 0.7738; kin slot 61."""
+    return {"tag": "207", "bias": 0.773811, "kin": 61, "hex": "d0c1027c"}
+
+def _pout_catalog_lane_208() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 208; anchor f2a00f8f; bias 0.3856; kin slot 33."""
+    return {"tag": "208", "bias": 0.385638, "kin": 33, "hex": "f2a00f8f"}
+
+def _pout_catalog_lane_209() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 209; anchor 8002287e; bias 0.7355; kin slot 34."""
+    return {"tag": "209", "bias": 0.735532, "kin": 34, "hex": "8002287e"}
+
+def _pout_catalog_lane_210() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 210; anchor 8366807f; bias 0.5113; kin slot 51."""
+    return {"tag": "210", "bias": 0.511289, "kin": 51, "hex": "8366807f"}
+
+def _pout_catalog_lane_211() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 211; anchor 39b9461a; bias 0.9403; kin slot 68."""
+    return {"tag": "211", "bias": 0.940344, "kin": 68, "hex": "39b9461a"}
+
+def _pout_catalog_lane_212() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 212; anchor d96c8406; bias 0.6183; kin slot 59."""
+    return {"tag": "212", "bias": 0.618314, "kin": 59, "hex": "d96c8406"}
+
+def _pout_catalog_lane_213() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 213; anchor da5e9e08; bias 0.6256; kin slot 62."""
+    return {"tag": "213", "bias": 0.625603, "kin": 62, "hex": "da5e9e08"}
+
+def _pout_catalog_lane_214() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 214; anchor f85c7731; bias 0.4986; kin slot 80."""
+    return {"tag": "214", "bias": 0.498598, "kin": 80, "hex": "f85c7731"}
+
+def _pout_catalog_lane_215() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 215; anchor fe1fc826; bias 0.7604; kin slot 70."""
+    return {"tag": "215", "bias": 0.760420, "kin": 70, "hex": "fe1fc826"}
+
+def _pout_catalog_lane_216() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 216; anchor 860ba03f; bias 0.1806; kin slot 64."""
+    return {"tag": "216", "bias": 0.180619, "kin": 64, "hex": "860ba03f"}
+
+def _pout_catalog_lane_217() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 217; anchor e573eccf; bias 0.4671; kin slot 49."""
+    return {"tag": "217", "bias": 0.467088, "kin": 49, "hex": "e573eccf"}
+
+def _pout_catalog_lane_218() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 218; anchor 7bc21b75; bias 0.8931; kin slot 20."""
+    return {"tag": "218", "bias": 0.893125, "kin": 20, "hex": "7bc21b75"}
+
+def _pout_catalog_lane_219() -> dict[str, float | int | str]:
+    """Synthetic veneer lane 219; anchor 43602306; bias 0.3378; kin slot 42."""
+    return {"tag": "219", "bias": 0.337818, "kin": 42, "hex": "43602306"}
+
+
+
+# --- end generated catalog region ---
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
